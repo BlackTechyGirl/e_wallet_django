@@ -1,16 +1,93 @@
-from django.contrib.auth.models import User
-from django.db import models
+import email
+
+from django.contrib.auth.models import User, AbstractUser
+from django.db import models, transaction
+from django.template.defaultfilters import default
 
 
 # Create your models here.
 
-class WalletAccount(models.Model):
-    wallet_user = models.ForeignKey(User, on_delete=models.CASCADE)
-    balance = models.DecimalField()
+class NextOfKin(models.Model):
+    full_name = models.CharField(max_length=255, blank=False, null=False)
+    email = models.EmailField(unique=True, null=False, blank=False)
+    phone_number = models.CharField(max_length=255, blank=False, null=False)
+    relationship = models.CharField(max_length=255, blank=False, null=False)
+    bvn = models.CharField(max_length=255, blank=False, null=False)
+
+    def __str__(self):
+        return self.full_name
 
 
-class WalletUser(models.Model):
+class CreditCard(models.Model):
+    card_name = models.CharField(max_length=255, blank=False, null=False)
+    card_number = models.CharField(max_length=10, blank=False)
+    expiry_date = models.DateField(null=False, blank=False)
+    cvv = models.IntegerField(max_length=3)
+
+    def __str__(self):
+        return self.card_name
+
+
+class Account(models.Model):
+    BANK_CHOICES = [
+        ('ZENITH', 'ZENITH'),
+        ('UBA', 'UBA'),
+        ('PALMPAY', 'PALMPAY'),
+        ('KUDA', 'KUDA'),
+        ('GTB', 'GTB'),
+    ]
     name = models.CharField(max_length=255, blank=False, null=False)
-    email = models.EmailField(max_length=255, blank=False, null=False)
-    password = models.CharField(max_length=255)
-    phone_number = models.CharField(max_length=255)
+    account_number = models.CharField(max_length=255, blank=False, null=False)
+    bank = models.CharField(max_length=255, choices=BANK_CHOICES, default='')
+    credit_card = models.ForeignKey(CreditCard, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.name
+
+
+class WalletUser(AbstractUser):
+    email = models.EmailField(unique=True, blank=False, null=False)
+    nin = models.CharField(blank=False, null=False)
+    home_address = models.CharField(blank=False, null=False)
+    card = models.ForeignKey(CreditCard, on_delete=models.CASCADE)
+    next_of_kin = models.ForeignKey(NextOfKin, on_delete=models.CASCADE, related_name='next_of_kin')
+    credit_card = models.ForeignKey(CreditCard, on_delete=models.CASCADE)
+
+
+class Airtime(models.Model):
+    NETWORK_CHOICES = [
+        ('MTN', 'MTN'),
+        ('GLO', 'GLO'),
+        ('AIRTEL', 'AIRTEL'),
+        ('ETISALAT', 'ETISALAT'),
+    ]
+    network = models.CharField(max_length=25, choices=NETWORK_CHOICES, default='')
+    phone_number = models.CharField(max_length=255, blank=False, null=False)
+
+
+class Transaction(models.Model):
+    STATUS = [
+        ('SUCCESSFUL', 'SUCCESSFUL'),
+        ('FAILED', 'FAILED'),
+        ('REVERSED', 'REVERSED'),
+        ('PENDING', 'PENDING'),
+    ]
+    TRANSACTION_TYPES = [
+        ('WITHDRAWN', 'WITHDRAWN'),
+        ('SPENDING', 'SPEND'),
+        ('SAVE', 'SAVE'),
+        ('AIRTIME', 'AIRTIME'),
+    ]
+    transaction_types = models.CharField(max_length=24, choices=TRANSACTION_TYPES, default='')
+    status = models.CharField(max_length=25, choices=STATUS, default='')
+    account = models.ForeignKey(Account, on_delete=models.CASCADE, default='')
+    amount = models.DecimalField(max_digits=255, decimal_places=2)
+    description = models.TextField()
+    transaction_time = models.DateTimeField(auto_now_add=True)
+    user = models.ForeignKey(WalletUser, on_delete=models.CASCADE, related_name='user')
+
+
+class Wallet(models.Model):
+    user = models.ForeignKey(WalletUser, on_delete=models.CASCADE, related_name='user')
+    balance = models.DecimalField(decimal_places=4, default=0, max_digits=6)
+    transaction = models.ForeignKey(Transaction, on_delete=models.CASCADE, default='')
